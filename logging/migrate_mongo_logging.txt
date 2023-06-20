@@ -1,0 +1,7 @@
+2023-06-20 09:32:44 INFO:__main__:Migration to mongo started
+2023-06-20 09:32:45 INFO:__main__:educational_institutions already migrated
+2023-06-20 09:32:45 INFO:__main__:territories already migrated
+2023-06-20 09:33:10 INFO:__main__:participants already migrated
+2023-06-20 09:34:01 INFO:__main__:testings already migrated
+2023-06-20 09:34:01 INFO:__main__:points_of_observation already migrated
+2023-06-20 09:34:01 INFO:__main__:Migration completed in 76.85310196876526 seconds
