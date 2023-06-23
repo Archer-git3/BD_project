@@ -44,6 +44,7 @@ mongo_db = os.getenv('MONGO_DB')
 client = MongoClient(f'mongodb://{mongo_host}:{mongo_port}')
 db1 = client[f'{mongo_db}']
 
+cache_to_change = True
 
 def init_logging():
     """
@@ -416,6 +417,7 @@ def get_test_list():
 
 @app.route('/query/mongo', methods=['POST'])
 def execute_query_m():
+    global cache_to_change
     reg_name = request.form.get('reg_name')
     test_name = request.form.get('test_name')
     year = request.form.get('year')
@@ -426,8 +428,10 @@ def execute_query_m():
                  'tests': tests, 'reg_names': reg_names, 'year_options': year_options}
 
     key = 'mongo' + str(reg_name) + str(test_name) + str(year)
+
+
     avg_dict = redis_client.get(str(key))
-    if avg_dict:
+    if avg_dict and cache_to_change==True:
         avg_dict = pickle.loads(avg_dict)
         return render_template('m_query.html', average_scores=avg_dict, reg_name=reg_name, year=year, **arguments)
     else:
@@ -459,7 +463,9 @@ def execute_query_m():
                     'RegName': '$participant.RegName'
                 },
                 'average': {
-                    '$avg': '$Ball100'
+                    '$avg': {
+                        '$toDouble': '$Ball100'
+                    }
                 }
             }
         },
@@ -496,11 +502,10 @@ def execute_query_m():
         avg_score = elem['average']
         avg_dict[f'{RegName[0]}-{Year}'] = {'reg_name': RegName[0], 'year': Year, 'avg_score': avg_score}
 
+    # Update cache
     if not cache:
         redis_client.set(str(key), pickle.dumps(avg_dict))
-
-
-
+    cache_to_change = True
     return render_template('m_query.html', average_scores=avg_dict, reg_name=reg_name, year=year, **arguments)
 
 
@@ -508,19 +513,30 @@ def execute_query_m():
 def update_row_m():
     table_name = request.form.get('table_name')
     row_id = request.form.get('row_id')
-    updated_data = {column: request.form.get(column) for column in request.form if
-                    column != 'table_name' and column != 'row_id'}
+    updated_data = {}
+
+    for column, value in request.form.items():
+        if column not in ['table_name', 'row_id']:
+            try:
+                # Спробуйте перетворити значення на число
+                updated_data[column] = int(value)
+            except ValueError:
+                # Якщо не вдалося перетворити на число, лишаємо значення як є
+                updated_data[column] = value
 
     collection = db1[table_name]
+    global cache_to_change
+
+    if table_name == "testing_mongo" or table_name == 'participant_mongo':
+        cache_to_change = False
 
     if table_name != "participant_mongo":
         query = {'_id': int(row_id)}
     else:
         query = {'_id': row_id}
 
-    update_data = {'$set': {k: v for k, v in updated_data.items() if k != '_id'}}
+    update_data = {'$set': updated_data}
     collection.update_one(query, update_data, upsert=True)
-
     selected_table = table_name
     limit = 10
     column_names = list(collection.find_one().keys())
@@ -538,9 +554,11 @@ def get_distinct_values(collection_name, column_name):
     distinct_values = [item[column_name] for item in result]
     return distinct_values
 
+
 @app.route('/add_row/mongo', methods=['GET'])
 def add_row_m():
     return render_template('m_add_row.html')
+
 
 @app.route('/add_rows/mongo', methods=['POST'])
 def add_rows_m():
@@ -559,7 +577,9 @@ def add_rows_m():
 
     collection = db1[collection_name]
     collection.insert_one(updated_data)
-
+    global cache_to_change
+    if collection_name == "testing_mongo" or collection_name == 'participant_mongo':
+        cache_to_change = False
     return redirect('/main/mongo')
 
 
@@ -588,33 +608,22 @@ def upgate_row_m():
                            result=result)
 
 
-@app.route('/upgrade/mongo', methods=['POST'])
-def upgrade_m():
-    row_id = request.form['row_id']
-    table_name = request.form['table_name']
-
-    collection = db[table_name]
-    row = collection.find_one({'_id': ObjectId(row_id)})
-
-    for key in request.form:
-        if key != 'row_id' and key != 'table_name':
-            collection.update_one({'_id': ObjectId(row_id)}, {'$set': {key: request.form[key]}})
-
-    return render_template('m_edit_row.html', row=row, table_name=table_name, row_id=row_id)
-
 
 @app.route('/delete_row/mongo', methods=['POST'])
 def delete_row_m():
     row_id = request.form['row_id']
     table_name = request.form['table_name']
-
+    global cashe_to_change
     collection = db1[table_name]
+    if table_name == "testing_mongo" or table_name =='participant_mongo' :
+        cashe_to_change = False
     if table_name != "participant_mongo":
         query = {'_id': int(row_id)}
         collection.delete_one(query)
     else:
         query = {'_id': row_id}
         collection.delete_one(query)
+
     return redirect('/main/mongo')
 
 
