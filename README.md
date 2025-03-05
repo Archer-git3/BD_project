@@ -1,4 +1,4 @@
-# KPI_DB-2_Laboratory
+# DB project
 
 Github repository for doing labs on the subject "Databases". 
 
